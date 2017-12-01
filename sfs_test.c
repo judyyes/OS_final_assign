@@ -283,32 +283,32 @@ main(int argc, char **argv)
    */
   // mksfs(0);
   //
-  for (i = 0; i < nopen; i++) {
-    fds[i] = sfs_fopen(names[i]);
-    sfs_fseek(fds[i], 0);
-    if (fds[i] >= 0) {
-      readsize = sfs_fread(fds[i], fixedbuf, sizeof(fixedbuf));
-      if (readsize != strlen(test_str)) {
-        fprintf(stderr, "ERROR: Read wrong number of bytes\n");
-        error_count++;
-      }
-
-      for (j = 0; j < strlen(test_str); j++) {
-        if (test_str[j] != fixedbuf[j]) {
-          fprintf(stderr, "ERROR: Wrong byte in %s at %d (%d,%d)\n",
-                  names[i], j, fixedbuf[j], test_str[j]);
-          printf("%d\n", fixedbuf[1]);
-          error_count++;
-          break;
-        }
-      }
-
-      if (sfs_fclose(fds[i]) != 0) {
-        fprintf(stderr, "ERROR: close of handle %d failed\n", fds[i]);
-        error_count++;
-      }
-    }
-  }
+  // for (i = 0; i < nopen; i++) {
+  //   fds[i] = sfs_fopen(names[i]);
+  //   sfs_fseek(fds[i], 0);
+  //   if (fds[i] >= 0) {
+  //     readsize = sfs_fread(fds[i], fixedbuf, sizeof(fixedbuf));
+  //     if (readsize != strlen(test_str)) {
+  //       fprintf(stderr, "ERROR: Read wrong number of bytes\n");
+  //       error_count++;
+  //     }
+  //
+  //     for (j = 0; j < strlen(test_str); j++) {
+  //       if (test_str[j] != fixedbuf[j]) {
+  //         fprintf(stderr, "ERROR: Wrong byte in %s at %d (%d,%d)\n",
+  //                 names[i], j, fixedbuf[j], test_str[j]);
+  //         printf("%d\n", fixedbuf[1]);
+  //         error_count++;
+  //         break;
+  //       }
+  //     }
+  //
+  //     if (sfs_fclose(fds[i]) != 0) {
+  //       fprintf(stderr, "ERROR: close of handle %d failed\n", fds[i]);
+  //       error_count++;
+  //     }
+  //   }
+  // }
   //
   // printf("Trying to fill up the disk with repeated writes to %s.\n", names[0]);
   // printf("(This may take a while).\n");

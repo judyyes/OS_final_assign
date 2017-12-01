@@ -13,7 +13,7 @@
 #define BITMAP_ROW_SIZE (NUM_BLOCKS/8) // this essentially mimcs the number of rows we have in the bitmap. we will have 128 rows.
 #define BLOCK_SIZE 1024
 #define NUM_INODES 500
-#define NUM_OF_FILES 300
+#define NUM_OF_FILES 256
 
 
 superblock_t super_block;
@@ -131,20 +131,22 @@ int sfs_fopen(char *name){
         }
       }
       // allocate the first unused fd slot
-      for (j = 0; j < NUM_OF_FILES; j++) {
+      for (int k = 0; k < NUM_OF_FILES; k++) {
 
-        if (file_descriptors[j].inode == NULL){
-          file_descriptors[j].inodeIndex = directory_entry_tbl[i].num;
-          file_descriptors[j].inode = &inode_tbl[directory_entry_tbl[i].num];
-          file_descriptors[j].rwptr = inode_tbl[directory_entry_tbl[i].num].size;
-          return j;
+        if (file_descriptors[k].inode == NULL){
+          file_descriptors[k].inodeIndex = directory_entry_tbl[i].num;
+          file_descriptors[k].inode = &inode_tbl[directory_entry_tbl[i].num];
+          file_descriptors[k].rwptr = inode_tbl[directory_entry_tbl[i].num].size;
+          return k;
         }
       }
+
     }
   }
   // new file
   int createdEntry = 0, createdFD = 0, createdInode = 0;
   int fd = -1;
+  // find the first unused inode
   for (i = 0; i < NUM_INODES; i++){
     if (inode_tbl[i].link_cnt == UINT_MAX && createdInode == 0){
       int num = get_index();
@@ -168,9 +170,6 @@ int sfs_fopen(char *name){
       }
     }
   }
-  // printf("%s\n", directory_entry_tbl[fd].name);
-  // printf("%d\n", file_descriptors[fd].inodeIndex);
-  // printf("%d\n", inode_tbl[file_descriptors[fd].inodeIndex].link_cnt);
   return fd;
 }
 
@@ -189,7 +188,6 @@ int sfs_fread(int fileID, char *buf, int length) {
   int inode_num = file_descriptors[fileID].inodeIndex;
   int file_opened = 0;
   int i;
-  // printf("%d \n", inode_num);
   for(i = 0; i < NUM_OF_FILES; i++){
     int num = directory_entry_tbl[i].num;
     if (num == UINT_MAX)
@@ -199,7 +197,6 @@ int sfs_fread(int fileID, char *buf, int length) {
       break;
     }
   }
-  // printf("%d\n", file_opened);
   if (file_opened == 0){
     printf("Required file is not opened\n");
     return -1;
@@ -218,15 +215,9 @@ int sfs_fread(int fileID, char *buf, int length) {
   int cur_offset = file_descriptors[fileID].rwptr % BLOCK_SIZE;
   // check if the required read length is greater than the file size with the rwptr positioned
   // if so, only read the best we can
-  // printf("length %d\n", length);
-  // printf("file_size %d\n", file_size);
-  long test = (long)file_descriptors[fileID].rwptr;
-  // printf("rwptr: %ld\n", test);
   int len = length;
   memset(buf, 0, len);
   length = (file_descriptors[fileID].rwptr + length) > file_size ? (file_size - file_descriptors[fileID].rwptr) : length;
-  int new_len = length;
-  // printf("length %d\n", length);
   inode_t cur_inode = inode_tbl[file_descriptors[fileID].inodeIndex];
   // navigate to the block where current rwptr is pointing to
   while (link != 0) {
@@ -234,16 +225,12 @@ int sfs_fread(int fileID, char *buf, int length) {
     link --;
   }
   read_blocks(cur_inode.data_ptrs[cur_block % 12], 1, read_temp);
-  // printf("read temp: %s\n", read_temp);
-  // printf("cur_offset: %d\n", cur_offset);
   int read_len = length > BLOCK_SIZE - cur_offset ? BLOCK_SIZE - cur_offset : length;
-  // printf("read_len: %d\n", read_len);
   memcpy(buf, read_temp + cur_offset, read_len);
   cur_read_len += read_len;
   file_descriptors[fileID].rwptr += read_len;
   length -= read_len;
   cur_block++;
-  // printf("length left: %d\n", length);
   while (length > 0){
     if (cur_block % 12 == 0){
       cur_inode = inode_tbl[cur_inode.indirectPointer];
@@ -254,10 +241,8 @@ int sfs_fread(int fileID, char *buf, int length) {
     cur_read_len += read_len;
     file_descriptors[fileID].rwptr += read_len;
     length -= read_len;
-    // printf("length left: %d\n", length);
     cur_block++;
   }
-  // buf[len] = '\0';
   return len;
 }
 
@@ -266,7 +251,6 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
   int inode_num = file_descriptors[fileID].inodeIndex;
   int file_opened = 0;
   int i;
-  // printf("%d \n", inode_num);
   for(i = 0; i < NUM_OF_FILES; i++){
     int num = directory_entry_tbl[i].num;
     if (num == UINT_MAX)
@@ -276,7 +260,6 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
       break;
     }
   }
-  // printf("%d\n", file_opened);
   if (file_opened == 0){
     printf("Required file is not opened\n");
     return -1;
@@ -288,14 +271,11 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
   // write to the file
   int cur_len = length, num = 0, len_written = 0;
   int cur_ptr = file_descriptors[fileID].rwptr;
-  // int total_block = (cur_ptr + length) / BLOCK_SIZE;
   int cur_block = cur_ptr / BLOCK_SIZE;
   int link = cur_block / 12;
-  // int ptr_num = cur_block % 12;
   char write_temp[BLOCK_SIZE];
   inode_t* cur_inode = file_descriptors[fileID].inode;
   while (link != 0) {
-    printf("indirect:%d\n", cur_inode->indirectPointer);
     cur_inode = &inode_tbl[cur_inode->indirectPointer];
     link --;
   }
@@ -303,14 +283,9 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
     num = get_index();
     cur_inode->data_ptrs[cur_block % 12] = num;
   }
-  // printf("bit map: %d\n", cur_inode->data_ptrs[cur_block % 12]);
   read_blocks(cur_inode->data_ptrs[cur_block % 12], 1, write_temp);
-  // printf("read: %s\n", write_temp);
   int write_len = cur_len <= BLOCK_SIZE - file_descriptors[fileID].rwptr % BLOCK_SIZE ? cur_len : BLOCK_SIZE - file_descriptors[fileID].rwptr % BLOCK_SIZE;
   memcpy(write_temp + file_descriptors[fileID].rwptr % BLOCK_SIZE, buf + len_written, write_len);
-  // printf("cur_block: %d\n", cur_block % 12);
-  // printf("write_len : %d\n", write_len);
-  // printf("write : %s\n", write_temp);
   write_blocks(cur_inode->data_ptrs[cur_block % 12], 1, write_temp);
   cur_block ++;
   len_written += write_len;
@@ -319,53 +294,36 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
 
   while (cur_len > 0) {
     if (cur_block % 12 == 0) {
-      // create new link
-      for (int i = 0; i < NUM_INODES; i++){
-        if (inode_tbl[i].link_cnt == UINT_MAX){
-          // int num = get_index();
-          // inode_tbl[i].data_ptrs[0] = num;
-          inode_tbl[i].link_cnt = 0;
-          cur_inode->indirectPointer = i;
-          cur_inode = &inode_tbl[i];
-          break;
+        // create new link when 12 blocks are filled and indirect in not created
+      if(cur_inode->indirectPointer == -1){
+        for (int i = 0; i < NUM_INODES; i++){
+          if (inode_tbl[i].link_cnt == UINT_MAX){
+            inode_tbl[i].link_cnt = 0;
+            cur_inode->indirectPointer = i;
+            break;
+          }
         }
+        // navigate to next inode
+        cur_inode = &inode_tbl[cur_inode->indirectPointer];
       }
     }
     // assign new block
-    num = get_index();
-    cur_inode->data_ptrs[cur_block % 12] = num;
+    if (cur_inode->data_ptrs[cur_block % 12] == -1){
+      num = get_index();
+      cur_inode->data_ptrs[cur_block % 12] = num;
+    }
+
 
     int write_len = cur_len > BLOCK_SIZE ? BLOCK_SIZE : cur_len;
     memset(write_temp, 0, BLOCK_SIZE);
     memcpy(write_temp, buf + len_written, write_len);
     write_blocks(cur_inode->data_ptrs[cur_block % 12], 1, write_temp);
-    // printf("block num: %d\n", cur_block % 12);
-    // printf("write_len: %d\n", write_len);
-    // printf("write: %s\n", write_temp);
     cur_block ++;
     len_written += write_len;
     cur_len -= write_len;
     file_descriptors[fileID].rwptr += write_len;
   }
-  // printf("total_block: %d\n", cur_block);
-  if (cur_block % 12 == 0) {
-    // create new link
-    for (int i = 0; i < NUM_INODES; i++){
-      if (inode_tbl[i].link_cnt == UINT_MAX){
-        // int num = get_index();
-        // inode_tbl[i].data_ptrs[0] = num;
-        inode_tbl[i].link_cnt = 0;
-        file_descriptors[fileID].inode->indirectPointer = i;
-        cur_inode = &inode_tbl[i];
-        num = get_index();
-        cur_inode->data_ptrs[cur_block % 12] = num;
-        // printf("wats the num: %d\n", num);
-        break;
-      }
-    }
-  }
   file_descriptors[fileID].inode->size = file_descriptors[fileID].rwptr > file_descriptors[fileID].inode->size ? file_descriptors[fileID].rwptr : file_descriptors[fileID].inode->size;
-  // printf("size : %d\n", file_descriptors[fileID].inode->size);
   return len_written;
 }
 
