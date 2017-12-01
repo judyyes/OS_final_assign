@@ -1,0 +1,1 @@
+/usr/bin/cc  -g   CMakeFiles/OS_final_assign.dir/bitmap.c.o CMakeFiles/OS_final_assign.dir/disk_emu.c.o CMakeFiles/OS_final_assign.dir/sfs_api.c.o CMakeFiles/OS_final_assign.dir/sfs_test.c.o  -o OS_final_assign 
