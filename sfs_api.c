@@ -1,0 +1,389 @@
+
+#include "sfs_api.h"
+#include "bitmap.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fuse.h>
+#include <strings.h>
+#include <limits.h>
+#include "disk_emu.h"
+#define ZHU_DISHI_DISK "sfs_disk.disk"
+#define NUM_BLOCKS 1024  //maximum number of data blocks on the disk.
+#define BITMAP_ROW_SIZE (NUM_BLOCKS/8) // this essentially mimcs the number of rows we have in the bitmap. we will have 128 rows.
+#define BLOCK_SIZE 1024
+#define NUM_INODES 500
+#define NUM_OF_FILES 300
+
+
+superblock_t super_block;
+file_descriptor file_descriptors[NUM_OF_FILES];
+directory_entry directory_entry_tbl[NUM_OF_FILES];
+inode_t inode_tbl[NUM_INODES];
+/* macros */
+#define FREE_BIT(_data, _which_bit) \
+    _data = _data | (1 << _which_bit)
+
+#define USE_BIT(_data, _which_bit) \
+    _data = _data & ~(1 << _which_bit)
+
+
+//initialize all bits to high
+// uint8_t free_bit_map[BITMAP_ROW_SIZE] = { [0 ... BITMAP_ROW_SIZE - 1] = UINT8_MAX };
+
+//initialize super block
+void init_super_block(){
+  super_block.magic = 0;
+  super_block.block_size = BLOCK_SIZE;
+  super_block.fs_size = BLOCK_SIZE * NUM_BLOCKS;
+  // todo
+}
+
+// init_directory entry table
+void init_directory_entry(){
+  for (int i = 0; i < NUM_OF_FILES; i ++){
+    directory_entry_tbl[i].num = UINT_MAX;
+    for (int j = 0; j < MAX_FILE_NAME; j ++){
+      directory_entry_tbl[i].name[j] = '\0';
+    }
+  }
+}
+//initialize file descriptor
+void init_file_descriptor(){
+  for (int i = 0; i < NUM_OF_FILES; i ++) {
+    file_descriptors[i].inodeIndex = UINT_MAX;
+    file_descriptors[i].inode = NULL;
+    file_descriptors[i].rwptr = 0;
+  }
+}
+
+void init_inode_table() {
+  for (int i = 0; i < NUM_INODES; i++) {
+    inode_tbl[i].mode = UINT_MAX;
+    inode_tbl[i].link_cnt = UINT_MAX;
+    inode_tbl[i].uid = 0;
+    inode_tbl[i].gid = 0;
+    inode_tbl[i].size = 0;
+    for (int j = 0; j < 12; j ++) {
+      inode_tbl[i].data_ptrs[j] = UINT_MAX;
+    }
+    inode_tbl[i].indirectPointer = UINT_MAX;
+  }
+}
+
+/* Formats the virtual disk implemented by the disk emulator and creates an instance of the simple
+file system on top of it. The mksfs() has a fresh flag to signal that the file system should be created
+scratch. If flag is false, the file system is opened from the disk. The support for persistence is
+important so you can reuse existing data or create a new file system. */
+void mksfs(int fresh) {
+	if (fresh == 0){ // the flag is false, open from disk
+    init_disk(ZHU_DISHI_DISK, BLOCK_SIZE, NUM_BLOCKS);
+    // read super block from disk
+    // read_blocks(0, 1, &super_block);
+    // read inode table
+
+    // read directory entry table
+
+    // read bit map table
+    init_inode_table();
+    init_directory_entry();
+    init_file_descriptor();
+  }
+  else{ // the flag is true, create from scratch
+    init_fresh_disk(ZHU_DISHI_DISK, BLOCK_SIZE, NUM_BLOCKS);
+
+    // init_super_block();
+    // write superblock in sfs
+    // write_blocks(get_index(), 1, &super_block)
+    // printf("%d \n", free_bit_map[0]);
+    // write bit map in sfs
+    init_inode_table();
+    init_directory_entry();
+    init_file_descriptor();
+  }
+}
+
+/* Copies the name of the next file in the directory into fname and returns non zero if there
+is a new file. Once all the files have been returned, this function returns 0. So, you should
+be able to use this function to loop through the directory. */
+int sfs_getnextfilename(char *fname){
+
+}
+
+/* Returns the size of a given file */
+int sfs_getfilesize(const char* path){
+
+}
+int sfs_fopen(char *name){
+  if (strlen(name) > MAX_FILE_NAME){
+    printf("File name to long\n");
+    return -1;
+  }
+  // return the fd num if the file exists; fd represents the files that are open
+  int i, j;
+  for (i = 0; i < NUM_OF_FILES; i++) {
+    if (strcmp(name, directory_entry_tbl[i].name) == 0){
+      // check if the file is opened already
+      for (j = 0; j < NUM_OF_FILES; j++) {
+        if (directory_entry_tbl[i].num == file_descriptors[j].inodeIndex){
+          printf("File already opened\n");
+          return j;
+        }
+      }
+      // allocate the first unused fd slot
+      for (j = 0; j < NUM_OF_FILES; j++) {
+
+        if (file_descriptors[j].inode == NULL){
+          file_descriptors[j].inodeIndex = directory_entry_tbl[i].num;
+          file_descriptors[j].inode = &inode_tbl[directory_entry_tbl[i].num];
+          file_descriptors[j].rwptr = inode_tbl[directory_entry_tbl[i].num].size;
+          return j;
+        }
+      }
+    }
+  }
+  // new file
+  int createdEntry = 0, createdFD = 0, createdInode = 0;
+  int fd = -1;
+  for (i = 0; i < NUM_INODES; i++){
+    if (inode_tbl[i].link_cnt == UINT_MAX && createdInode == 0){
+      int num = get_index();
+      inode_tbl[i].data_ptrs[0] = num;
+      inode_tbl[i].link_cnt = 0;
+      createdInode = 1;
+
+      for (j = 0; j < NUM_OF_FILES; j++){
+        if (directory_entry_tbl[j].num == -1 && createdEntry == 0){
+          directory_entry_tbl[j].num = i;
+          strcpy(directory_entry_tbl[j].name, name);
+          createdEntry = 1;
+        }
+        if (file_descriptors[j].inode == NULL && createdFD == 0){
+          file_descriptors[j].inode = &inode_tbl[i];
+          file_descriptors[j].inodeIndex = i;
+          file_descriptors[j].rwptr = 0;
+          createdFD = 1;
+          fd = j;
+        }
+      }
+    }
+  }
+  // printf("%s\n", directory_entry_tbl[fd].name);
+  // printf("%d\n", file_descriptors[fd].inodeIndex);
+  // printf("%d\n", inode_tbl[file_descriptors[fd].inodeIndex].link_cnt);
+  return fd;
+}
+
+int sfs_fclose(int fileID) {
+
+  int inode_num = file_descriptors[fileID].inodeIndex;
+  if (inode_num == -1) return -1;
+  file_descriptors[fileID].inodeIndex = -1;
+  file_descriptors[fileID].inode = NULL;
+  file_descriptors[fileID].rwptr = -1;
+  return 0;
+}
+
+int sfs_fread(int fileID, char *buf, int length) {
+  // Check if the file is opened or  the write length is valid
+  int inode_num = file_descriptors[fileID].inodeIndex;
+  int file_opened = 0;
+  int i;
+  // printf("%d \n", inode_num);
+  for(i = 0; i < NUM_OF_FILES; i++){
+    int num = directory_entry_tbl[i].num;
+    if (num == UINT_MAX)
+      break;
+    if (num == inode_num){
+      file_opened = 1;
+      break;
+    }
+  }
+  // printf("%d\n", file_opened);
+  if (file_opened == 0){
+    printf("Required file is not opened\n");
+    return -1;
+  }
+  if (length <= 0){
+    printf("Length empty\n");
+    return -1;
+  }
+
+  // read file
+  int file_size = file_descriptors[fileID].inode->size;
+  char read_temp[BLOCK_SIZE];
+  int cur_read_len = 0;
+  int cur_block = file_descriptors[fileID].rwptr / BLOCK_SIZE;
+  int link = cur_block / 12;
+  int cur_offset = file_descriptors[fileID].rwptr % BLOCK_SIZE;
+  // check if the required read length is greater than the file size with the rwptr positioned
+  // if so, only read the best we can
+  // printf("length %d\n", length);
+  // printf("file_size %d\n", file_size);
+  long test = (long)file_descriptors[fileID].rwptr;
+  // printf("rwptr: %ld\n", test);
+  int len = length;
+  memset(buf, 0, len);
+  length = (file_descriptors[fileID].rwptr + length) > file_size ? (file_size - file_descriptors[fileID].rwptr) : length;
+  int new_len = length;
+  // printf("length %d\n", length);
+  inode_t cur_inode = inode_tbl[file_descriptors[fileID].inodeIndex];
+  // navigate to the block where current rwptr is pointing to
+  while (link != 0) {
+    cur_inode = inode_tbl[cur_inode.indirectPointer];
+    link --;
+  }
+  read_blocks(cur_inode.data_ptrs[cur_block % 12], 1, read_temp);
+  // printf("read temp: %s\n", read_temp);
+  // printf("cur_offset: %d\n", cur_offset);
+  int read_len = length > BLOCK_SIZE - cur_offset ? BLOCK_SIZE - cur_offset : length;
+  // printf("read_len: %d\n", read_len);
+  memcpy(buf, read_temp + cur_offset, read_len);
+  cur_read_len += read_len;
+  file_descriptors[fileID].rwptr += read_len;
+  length -= read_len;
+  cur_block++;
+  // printf("length left: %d\n", length);
+  while (length > 0){
+    if (cur_block % 12 == 0){
+      cur_inode = inode_tbl[cur_inode.indirectPointer];
+    }
+    read_blocks(cur_inode.data_ptrs[cur_block % 12], 1, read_temp);
+    read_len = length > BLOCK_SIZE ? BLOCK_SIZE : length;
+    memcpy(buf + cur_read_len, read_temp, read_len);
+    cur_read_len += read_len;
+    file_descriptors[fileID].rwptr += read_len;
+    length -= read_len;
+    // printf("length left: %d\n", length);
+    cur_block++;
+  }
+  // buf[len] = '\0';
+  return len;
+}
+
+int sfs_fwrite(int fileID, const char *buf, int length) {
+  // Check if the file is opened or  the write length is valid
+  int inode_num = file_descriptors[fileID].inodeIndex;
+  int file_opened = 0;
+  int i;
+  // printf("%d \n", inode_num);
+  for(i = 0; i < NUM_OF_FILES; i++){
+    int num = directory_entry_tbl[i].num;
+    if (num == UINT_MAX)
+      break;
+    if (num == inode_num){
+      file_opened = 1;
+      break;
+    }
+  }
+  // printf("%d\n", file_opened);
+  if (file_opened == 0){
+    printf("Required file is not opened\n");
+    return -1;
+  }
+  if (length <= 0){
+    printf("Length empty\n");
+    return -1;
+  }
+  // write to the file
+  int cur_len = length, num = 0, len_written = 0;
+  int cur_ptr = file_descriptors[fileID].rwptr;
+  // int total_block = (cur_ptr + length) / BLOCK_SIZE;
+  int cur_block = cur_ptr / BLOCK_SIZE;
+  int link = cur_block / 12;
+  // int ptr_num = cur_block % 12;
+  char write_temp[BLOCK_SIZE];
+  inode_t* cur_inode = file_descriptors[fileID].inode;
+  while (link != 0) {
+    printf("indirect:%d\n", cur_inode->indirectPointer);
+    cur_inode = &inode_tbl[cur_inode->indirectPointer];
+    link --;
+  }
+  if (cur_inode->data_ptrs[cur_block % 12] == -1){
+    num = get_index();
+    cur_inode->data_ptrs[cur_block % 12] = num;
+  }
+  // printf("bit map: %d\n", cur_inode->data_ptrs[cur_block % 12]);
+  read_blocks(cur_inode->data_ptrs[cur_block % 12], 1, write_temp);
+  // printf("read: %s\n", write_temp);
+  int write_len = cur_len <= BLOCK_SIZE - file_descriptors[fileID].rwptr % BLOCK_SIZE ? cur_len : BLOCK_SIZE - file_descriptors[fileID].rwptr % BLOCK_SIZE;
+  memcpy(write_temp + file_descriptors[fileID].rwptr % BLOCK_SIZE, buf + len_written, write_len);
+  // printf("cur_block: %d\n", cur_block % 12);
+  // printf("write_len : %d\n", write_len);
+  // printf("write : %s\n", write_temp);
+  write_blocks(cur_inode->data_ptrs[cur_block % 12], 1, write_temp);
+  cur_block ++;
+  len_written += write_len;
+  cur_len -= write_len;
+  file_descriptors[fileID].rwptr += write_len;
+
+  while (cur_len > 0) {
+    if (cur_block % 12 == 0) {
+      // create new link
+      for (int i = 0; i < NUM_INODES; i++){
+        if (inode_tbl[i].link_cnt == UINT_MAX){
+          // int num = get_index();
+          // inode_tbl[i].data_ptrs[0] = num;
+          inode_tbl[i].link_cnt = 0;
+          cur_inode->indirectPointer = i;
+          cur_inode = &inode_tbl[i];
+          break;
+        }
+      }
+    }
+    // assign new block
+    num = get_index();
+    cur_inode->data_ptrs[cur_block % 12] = num;
+
+    int write_len = cur_len > BLOCK_SIZE ? BLOCK_SIZE : cur_len;
+    memset(write_temp, 0, BLOCK_SIZE);
+    memcpy(write_temp, buf + len_written, write_len);
+    write_blocks(cur_inode->data_ptrs[cur_block % 12], 1, write_temp);
+    // printf("block num: %d\n", cur_block % 12);
+    // printf("write_len: %d\n", write_len);
+    // printf("write: %s\n", write_temp);
+    cur_block ++;
+    len_written += write_len;
+    cur_len -= write_len;
+    file_descriptors[fileID].rwptr += write_len;
+  }
+  // printf("total_block: %d\n", cur_block);
+  if (cur_block % 12 == 0) {
+    // create new link
+    for (int i = 0; i < NUM_INODES; i++){
+      if (inode_tbl[i].link_cnt == UINT_MAX){
+        // int num = get_index();
+        // inode_tbl[i].data_ptrs[0] = num;
+        inode_tbl[i].link_cnt = 0;
+        file_descriptors[fileID].inode->indirectPointer = i;
+        cur_inode = &inode_tbl[i];
+        num = get_index();
+        cur_inode->data_ptrs[cur_block % 12] = num;
+        // printf("wats the num: %d\n", num);
+        break;
+      }
+    }
+  }
+  file_descriptors[fileID].inode->size = file_descriptors[fileID].rwptr > file_descriptors[fileID].inode->size ? file_descriptors[fileID].rwptr : file_descriptors[fileID].inode->size;
+  // printf("size : %d\n", file_descriptors[fileID].inode->size);
+  return len_written;
+}
+
+int sfs_fseek(int fileID, int loc) {
+  if (fileID < 0 || file_descriptors[fileID].inodeIndex == UINT_MAX || loc < 0) {
+    printf("Error : Invalid input!\n");
+    return -1;
+  }
+  if (loc > file_descriptors[fileID].inode->size) {
+    printf("Error : New location larger than file size\n");
+    return -1;
+  }else{
+    file_descriptors[fileID].rwptr = loc;
+  }
+  return 0;
+}
+
+int sfs_remove(char *file) {
+
+
+}
