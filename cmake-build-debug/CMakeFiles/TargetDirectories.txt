@@ -1,3 +1,0 @@
-/home/2017/dzhu9/OS_final_assign/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/2017/dzhu9/OS_final_assign/cmake-build-debug/CMakeFiles/OS_final_assign.dir
-/home/2017/dzhu9/OS_final_assign/cmake-build-debug/CMakeFiles/rebuild_cache.dir

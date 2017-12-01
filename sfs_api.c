@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//#include <fuse.h>
+#include <fuse.h>
 #include <strings.h>
 #include <limits.h>
 #include "disk_emu.h"
@@ -36,8 +36,6 @@ void init_super_block(){
   super_block.magic = 0;
   super_block.block_size = BLOCK_SIZE;
   super_block.fs_size = BLOCK_SIZE * NUM_BLOCKS;
-    super_block.inode_table_len = NUM_INODES;
-    super_block.root_dir_inode
   // todo
 }
 
@@ -152,7 +150,6 @@ int sfs_fopen(char *name){
   for (i = 0; i < NUM_INODES; i++){
     if (inode_tbl[i].link_cnt == UINT_MAX && createdInode == 0){
       int num = get_index();
-        if (num > 1022) return 0;
       inode_tbl[i].data_ptrs[0] = num;
       inode_tbl[i].link_cnt = 0;
       createdInode = 1;
@@ -221,8 +218,7 @@ int sfs_fread(int fileID, char *buf, int length) {
   int len = length;
   memset(buf, 0, len);
   length = (file_descriptors[fileID].rwptr + length) > file_size ? (file_size - file_descriptors[fileID].rwptr) : length;
-    int new_len = length;
-    inode_t cur_inode = inode_tbl[file_descriptors[fileID].inodeIndex];
+  inode_t cur_inode = inode_tbl[file_descriptors[fileID].inodeIndex];
   // navigate to the block where current rwptr is pointing to
   while (link != 0) {
     cur_inode = inode_tbl[cur_inode.indirectPointer];
@@ -247,7 +243,7 @@ int sfs_fread(int fileID, char *buf, int length) {
     length -= read_len;
     cur_block++;
   }
-  return new_len;
+  return len;
 }
 
 int sfs_fwrite(int fileID, const char *buf, int length) {
@@ -285,7 +281,6 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
   }
   if (cur_inode->data_ptrs[cur_block % 12] == -1){
     num = get_index();
-      if (num > 1022) return 0;
     cur_inode->data_ptrs[cur_block % 12] = num;
   }
   read_blocks(cur_inode->data_ptrs[cur_block % 12], 1, write_temp);
@@ -315,7 +310,6 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
     // assign new block
     if (cur_inode->data_ptrs[cur_block % 12] == -1){
       num = get_index();
-        if (num > 1022) return 0;
       cur_inode->data_ptrs[cur_block % 12] = num;
     }
 

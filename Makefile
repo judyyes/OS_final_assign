@@ -1,4 +1,4 @@
-CFLAGS = -c -g -Wall -std=gnu99 `pkg-config fuse --cflags --libs` -D_FILE_OFFSET_BITS=64
+CFLAGS = -c -g -Wall -std=gnu99 `pkg-config fuse --cflags --libs`
 
 LDFLAGS = `pkg-config fuse --cflags --libs`
 

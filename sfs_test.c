@@ -281,96 +281,96 @@ main(int argc, char **argv)
 
   /* Now we try to re-initialize the system.
    */
-//   mksfs(0);
-
-   for (i = 0; i < nopen; i++) {
-     fds[i] = sfs_fopen(names[i]);
-     sfs_fseek(fds[i], 0);
-     if (fds[i] >= 0) {
-       readsize = sfs_fread(fds[i], fixedbuf, sizeof(fixedbuf));
-       if (readsize != strlen(test_str)) {
-         fprintf(stderr, "ERROR: Read wrong number of bytes\n");
-         error_count++;
-       }
-
-       for (j = 0; j < strlen(test_str); j++) {
-         if (test_str[j] != fixedbuf[j]) {
-           fprintf(stderr, "ERROR: Wrong byte in %s at %d (%d,%d)\n",
-                   names[i], j, fixedbuf[j], test_str[j]);
-           printf("%d\n", fixedbuf[1]);
-           error_count++;
-           break;
-         }
-       }
-
-       if (sfs_fclose(fds[i]) != 0) {
-         fprintf(stderr, "ERROR: close of handle %d failed\n", fds[i]);
-         error_count++;
-       }
-     }
-   }
-
-   printf("Trying to fill up the disk with repeated writes to %s.\n", names[0]);
-   printf("(This may take a while).\n");
-
-   /* Now try opening the first file, and just write a huge bunch of junk.
-    * This is just to try to fill up the disk, to see what happens.
-    */
-   fds[0] = sfs_fopen(names[0]);
-   if (fds[0] >= 0) {
-     for (i = 0; i < 100000; i++) {
-       int x;
-
-       if ((i % 100) == 0) {
-         fprintf(stderr, "%d\r", i);
-       }
-
-       memset(fixedbuf, (char)i, sizeof(fixedbuf));
-       x = sfs_fwrite(fds[0], fixedbuf, sizeof(fixedbuf));
-       if (x != sizeof(fixedbuf)) {
-         /* Sooner or later, this write should fail. The only thing is that
-          * it should fail gracefully, without any catastrophic errors.
-          */
-         printf("Write failed after %d iterations.\n", i);
-         printf("If the emulated disk contains just over %d bytes, this is OK\n",
-                (i * (int)sizeof(fixedbuf)));
-         break;
-       }
-     }
-     sfs_fclose(fds[0]);
-   }
-   else {
-     fprintf(stderr, "ERROR: re-opening file %s\n", names[0]);
-   }
-
-   /* Now, having filled up the disk, try one more time to read the
-    * contents of the files we created.
-    */
-   for (i = 0; i < nopen; i++) {
-     fds[i] = sfs_fopen(names[i]);
-     sfs_fseek(fds[i], 0);
-     if (fds[i] >= 0) {
-       readsize = sfs_fread(fds[i], fixedbuf, sizeof(fixedbuf));
-       if (readsize < strlen(test_str)) {
-         fprintf(stderr, "ERROR: Read wrong number of bytes\n");
-         error_count++;
-       }
-
-       for (j = 0; j < strlen(test_str); j++) {
-         if (test_str[j] != fixedbuf[j]) {
-           fprintf(stderr, "ERROR: Wrong byte in %s at position %d (%d,%d)\n",
-                   names[i], j, fixedbuf[j], test_str[j]);
-           error_count++;
-           break;
-         }
-       }
-
-       if (sfs_fclose(fds[i]) != 0) {
-         fprintf(stderr, "ERROR: close of handle %d failed\n", fds[i]);
-         error_count++;
-       }
-     }
-   }
+  // mksfs(0);
+  //
+  // for (i = 0; i < nopen; i++) {
+  //   fds[i] = sfs_fopen(names[i]);
+  //   sfs_fseek(fds[i], 0);
+  //   if (fds[i] >= 0) {
+  //     readsize = sfs_fread(fds[i], fixedbuf, sizeof(fixedbuf));
+  //     if (readsize != strlen(test_str)) {
+  //       fprintf(stderr, "ERROR: Read wrong number of bytes\n");
+  //       error_count++;
+  //     }
+  //
+  //     for (j = 0; j < strlen(test_str); j++) {
+  //       if (test_str[j] != fixedbuf[j]) {
+  //         fprintf(stderr, "ERROR: Wrong byte in %s at %d (%d,%d)\n",
+  //                 names[i], j, fixedbuf[j], test_str[j]);
+  //         printf("%d\n", fixedbuf[1]);
+  //         error_count++;
+  //         break;
+  //       }
+  //     }
+  //
+  //     if (sfs_fclose(fds[i]) != 0) {
+  //       fprintf(stderr, "ERROR: close of handle %d failed\n", fds[i]);
+  //       error_count++;
+  //     }
+  //   }
+  // }
+  //
+  // printf("Trying to fill up the disk with repeated writes to %s.\n", names[0]);
+  // printf("(This may take a while).\n");
+  //
+  // /* Now try opening the first file, and just write a huge bunch of junk.
+  //  * This is just to try to fill up the disk, to see what happens.
+  //  */
+  // fds[0] = sfs_fopen(names[0]);
+  // if (fds[0] >= 0) {
+  //   for (i = 0; i < 100000; i++) {
+  //     int x;
+  //
+  //     if ((i % 100) == 0) {
+  //       fprintf(stderr, "%d\r", i);
+  //     }
+  //
+  //     memset(fixedbuf, (char)i, sizeof(fixedbuf));
+  //     x = sfs_fwrite(fds[0], fixedbuf, sizeof(fixedbuf));
+  //     if (x != sizeof(fixedbuf)) {
+  //       /* Sooner or later, this write should fail. The only thing is that
+  //        * it should fail gracefully, without any catastrophic errors.
+  //        */
+  //       printf("Write failed after %d iterations.\n", i);
+  //       printf("If the emulated disk contains just over %d bytes, this is OK\n",
+  //              (i * (int)sizeof(fixedbuf)));
+  //       break;
+  //     }
+  //   }
+  //   sfs_fclose(fds[0]);
+  // }
+  // else {
+  //   fprintf(stderr, "ERROR: re-opening file %s\n", names[0]);
+  // }
+  //
+  // /* Now, having filled up the disk, try one more time to read the
+  //  * contents of the files we created.
+  //  */
+  // for (i = 0; i < nopen; i++) {
+  //   fds[i] = sfs_fopen(names[i]);
+  //   sfs_fseek(fds[i], 0);
+  //   if (fds[i] >= 0) {
+  //     readsize = sfs_fread(fds[i], fixedbuf, sizeof(fixedbuf));
+  //     if (readsize < strlen(test_str)) {
+  //       fprintf(stderr, "ERROR: Read wrong number of bytes\n");
+  //       error_count++;
+  //     }
+  //
+  //     for (j = 0; j < strlen(test_str); j++) {
+  //       if (test_str[j] != fixedbuf[j]) {
+  //         fprintf(stderr, "ERROR: Wrong byte in %s at position %d (%d,%d)\n",
+  //                 names[i], j, fixedbuf[j], test_str[j]);
+  //         error_count++;
+  //         break;
+  //       }
+  //     }
+  //
+  //     if (sfs_fclose(fds[i]) != 0) {
+  //       fprintf(stderr, "ERROR: close of handle %d failed\n", fds[i]);
+  //       error_count++;
+  //     }
+  //   }
+  // }
 
   fprintf(stderr, "Test program exiting with %d errors\n", error_count);
   return (error_count);
