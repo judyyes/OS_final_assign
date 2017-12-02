@@ -13,7 +13,7 @@
 #define BITMAP_ROW_SIZE (NUM_BLOCKS/8) // this essentially mimcs the number of rows we have in the bitmap. we will have 128 rows.
 #define BLOCK_SIZE 1024
 #define NUM_INODES 500
-#define NUM_OF_FILES 256
+#define NUM_OF_FILES 128
 
 
 superblock_t super_block;
@@ -88,9 +88,9 @@ void mksfs(int fresh) {
     // read directory entry table
 
     // read bit map table
-    init_inode_table();
-    init_directory_entry();
-    init_file_descriptor();
+//    init_inode_table();
+//    init_directory_entry();
+//    init_file_descriptor();
   }
   else{ // the flag is true, create from scratch
     init_fresh_disk(ZHU_DISHI_DISK, BLOCK_SIZE, NUM_BLOCKS);
@@ -125,7 +125,7 @@ int sfs_fopen(char *name){
   // return the fd num if the file exists; fd represents the files that are open
   int i, j;
   for (i = 0; i < NUM_OF_FILES; i++) {
-    if (strcmp(name, directory_entry_tbl[i].name) == 0){
+    if (compare_string(name, directory_entry_tbl[i].name)){
       // check if the file is opened already
       for (j = 0; j < NUM_OF_FILES; j++) {
         if (directory_entry_tbl[i].num == file_descriptors[j].inodeIndex){
@@ -153,7 +153,7 @@ int sfs_fopen(char *name){
   for (i = 0; i < NUM_INODES; i++){
     if (inode_tbl[i].size == -1 && createdInode == 0){
       int num = get_index();
-      if (num > 1022)return 0;
+      if (num >= 1022)return 0;
       inode_tbl[i].data_ptrs[0] = num;
       inode_tbl[i].size = 0;
       createdInode = 1;
@@ -161,8 +161,9 @@ int sfs_fopen(char *name){
       for (j = 0; j < NUM_OF_FILES; j++){
         if (directory_entry_tbl[j].num == -1){
           directory_entry_tbl[j].num = i;
-          strcpy(directory_entry_tbl[j].name, name);
-          createdEntry = 1;
+            for (int k = 0; k < MAX_FILE_NAME; k ++){
+                directory_entry_tbl[j].name[k] = name[k];
+            }
           break;
         }
       }
@@ -355,4 +356,13 @@ int sfs_fseek(int fileID, int loc) {
 int sfs_remove(char *file) {
 
 
+}
+// return 1 when equal
+int compare_string(char *str1, char *str2){
+    for(int i = 0; i < MAX_FILE_NAME; i++){
+        if (str1[i] != str2[i]){
+            return 0;
+        }
+    }
+    return 1;
 }
