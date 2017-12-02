@@ -7,6 +7,7 @@
 //#include <fuse.h>
 #include <strings.h>
 #include <limits.h>
+#include <libgen.h>
 #include "disk_emu.h"
 #define ZHU_DISHI_DISK "sfs_disk.disk"
 #define NUM_BLOCKS 1024  //maximum number of data blocks on the disk.
@@ -115,7 +116,13 @@ int sfs_getnextfilename(char *fname){
 
 /* Returns the size of a given file */
 int sfs_getfilesize(const char* path){
-
+    int file_size = 0;
+    for (int i = 0; i < NUM_OF_FILES; i++){
+        if (compare_string(directory_entry_tbl[i].name, basename((char*)path))){
+            file_size = file_descriptors[directory_entry_tbl[i].num].inode->size;
+        }
+    }
+    return file_size;
 }
 int sfs_fopen(char *name){
   if (strlen(name) > MAX_FILE_NAME){
@@ -193,67 +200,67 @@ int sfs_fclose(int fileID) {
 }
 
 int sfs_fread(int fileID, char *buf, int length) {
-  // Check if the file is opened or  the write length is valid
-  int inode_num = file_descriptors[fileID].inodeIndex;
-  int file_opened = 0;
-  int i;
-  for(i = 0; i < NUM_OF_FILES; i++){
-    int num = directory_entry_tbl[i].num;
-    if (num == -1)
-      break;
-    if (num == inode_num){
-      file_opened = 1;
-      break;
+     // Check if the file is opened or  the write length is valid
+    int inode_num = file_descriptors[fileID].inodeIndex;
+    int file_opened = 0;
+    int i;
+    for(i = 0; i < NUM_OF_FILES; i++){
+        int num = directory_entry_tbl[i].num;
+        if (num == -1)
+            break;
+        if (num == inode_num){
+            file_opened = 1;
+            break;
+        }
     }
-  }
-  if (file_opened == 0){
-    printf("Required file is not opened\n");
-    return -1;
-  }
-  if (length <= 0){
-    printf("Length empty\n");
-    return -1;
-  }
+    if (file_opened == 0){
+        printf("Required file is not opened\n");
+        return -1;
+    }
+    if (length <= 0){
+        printf("Length empty\n");
+        return -1;
+    }
 
-  // read file
-  int file_size = file_descriptors[fileID].inode->size;
-  char read_temp[BLOCK_SIZE];
-  int cur_read_len = 0;
-  int cur_block = file_descriptors[fileID].rwptr / BLOCK_SIZE;
-  int link = cur_block / 12;
-  int cur_offset = file_descriptors[fileID].rwptr % BLOCK_SIZE;
-  // check if the required read length is greater than the file size with the rwptr positioned
-  // if so, only read the best we can
-  int len = length;
-  memset(buf, 0, len);
-  length = (file_descriptors[fileID].rwptr + length) > file_size ? (file_size - file_descriptors[fileID].rwptr) : length;
-  int new_len = length;
-  inode_t cur_inode = inode_tbl[file_descriptors[fileID].inodeIndex];
-  // navigate to the block where current rwptr is pointing to
-  while (link != 0) {
-    cur_inode = inode_tbl[cur_inode.indirectPointer];
-    link --;
-  }
-  read_blocks(cur_inode.data_ptrs[cur_block % 12], 1, read_temp);
-  int read_len = length > BLOCK_SIZE - cur_offset ? BLOCK_SIZE - cur_offset : length;
-  memcpy(buf, read_temp + cur_offset, read_len);
-  cur_read_len += read_len;
-  file_descriptors[fileID].rwptr += read_len;
-  length -= read_len;
-  cur_block++;
-  while (length > 0){
-    if (cur_block % 12 == 0){
-      cur_inode = inode_tbl[cur_inode.indirectPointer];
+    // read file
+    int file_size = file_descriptors[fileID].inode->size;
+    char read_temp[BLOCK_SIZE];
+    int cur_read_len = 0;
+    int cur_block = file_descriptors[fileID].rwptr / BLOCK_SIZE;
+    int link = cur_block / 12;
+    int cur_offset = file_descriptors[fileID].rwptr % BLOCK_SIZE;
+    // check if the required read length is greater than the file size with the rwptr positioned
+    // if so, only read the best we can
+    int len = length;
+    memset(buf, 0, len);
+    length = (file_descriptors[fileID].rwptr + length) > file_size ? (file_size - file_descriptors[fileID].rwptr) : length;
+    int new_len = length;
+    inode_t cur_inode = inode_tbl[file_descriptors[fileID].inodeIndex];
+    // navigate to the block where current rwptr is pointing to
+    while (link != 0) {
+        cur_inode = inode_tbl[cur_inode.indirectPointer];
+        link --;
     }
     read_blocks(cur_inode.data_ptrs[cur_block % 12], 1, read_temp);
-    read_len = length > BLOCK_SIZE ? BLOCK_SIZE : length;
-    memcpy(buf + cur_read_len, read_temp, read_len);
+    int read_len = length > BLOCK_SIZE - cur_offset ? BLOCK_SIZE - cur_offset : length;
+    memcpy(buf, read_temp + cur_offset, read_len);
     cur_read_len += read_len;
     file_descriptors[fileID].rwptr += read_len;
     length -= read_len;
     cur_block++;
-  }
-  return new_len;
+    while (length > 0){
+        if (cur_block % 12 == 0){
+            cur_inode = inode_tbl[cur_inode.indirectPointer];
+        }
+        read_blocks(cur_inode.data_ptrs[cur_block % 12], 1, read_temp);
+        read_len = length > BLOCK_SIZE ? BLOCK_SIZE : length;
+        memcpy(buf + cur_read_len, read_temp, read_len);
+        cur_read_len += read_len;
+        file_descriptors[fileID].rwptr += read_len;
+        length -= read_len;
+        cur_block++;
+    }
+    return new_len;
 }
 
 int sfs_fwrite(int fileID, const char *buf, int length) {
@@ -291,7 +298,7 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
   }
   if (cur_inode->data_ptrs[cur_block % 12] == -1){
     num = get_index();
-    if (num > 1022)return 0;
+    if (num >= 1022)return 0;
     cur_inode->data_ptrs[cur_block % 12] = num;
   }
   read_blocks(cur_inode->data_ptrs[cur_block % 12], 1, write_temp);
@@ -321,7 +328,7 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
     // assign new block
     if (cur_inode->data_ptrs[cur_block % 12] == -1){
       num = get_index();
-      if (num > 1022)return 0;
+      if (num >= 1022)return 0;
       cur_inode->data_ptrs[cur_block % 12] = num;
     }
 
@@ -354,7 +361,51 @@ int sfs_fseek(int fileID, int loc) {
 }
 
 int sfs_remove(char *file) {
+    // Iterate through all the files and find the one with match file name
+    for (int i =0; i < NUM_OF_FILES; i++){
+        if (compare_string(directory_entry_tbl[i].name, file)) {
+            // remove file name
+            for (int j = 0; j < MAX_FILE_NAME; j++){
+                directory_entry_tbl[i].name[j] = '\0';
+            }
+            // remove in inode table
+            inode_t* cur_node = &inode_tbl[directory_entry_tbl[i].num];
 
+            while (cur_node->indirectPointer != -1) {
+                inode_t* nxt_node = &inode_tbl[cur_node->indirectPointer];
+                cur_node->indirectPointer = -1;
+                cur_node->size = -1;
+                for (int j = 0; j < 12; j ++) {
+                    if (cur_node->data_ptrs[j] != -1) {
+                        rm_index(cur_node->data_ptrs[j]);
+                        cur_node->data_ptrs[j] = -1;
+                    }
+                }
+                cur_node = nxt_node;
+            }
+            cur_node->indirectPointer = -1;
+            cur_node->size = -1;
+            for (int j = 0; j < 12; j ++) {
+                if (cur_node->data_ptrs[j] != -1) {
+                    rm_index(cur_node->data_ptrs[j]);
+                    cur_node->data_ptrs[j] = -1;
+                }
+            }
+            // remove file descriptors
+            for (int j = 0; j < MAX_FILE_NAME; j++){
+                if (directory_entry_tbl[i].num == file_descriptors[j].inodeIndex){
+                    file_descriptors[j].inodeIndex = -1;
+                    file_descriptors[j].rwptr = 0;
+                    file_descriptors[j].inode = NULL;
+                }
+            }
+
+            //remove file num in directory table
+            directory_entry_tbl[i].num = -1;
+
+        }
+    }
+    return 0;
 
 }
 // return 1 when equal
