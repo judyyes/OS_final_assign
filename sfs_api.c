@@ -45,7 +45,7 @@ void init_super_block(){
 // init_directory entry table
 void init_directory_entry(){
   for (int i = 0; i < NUM_OF_FILES; i ++){
-    directory_entry_tbl[i].num = UINT_MAX;
+    directory_entry_tbl[i].num = -1;
     for (int j = 0; j < MAX_FILE_NAME; j ++){
       directory_entry_tbl[i].name[j] = '\0';
     }
@@ -54,7 +54,7 @@ void init_directory_entry(){
 //initialize file descriptor
 void init_file_descriptor(){
   for (int i = 0; i < NUM_OF_FILES; i ++) {
-    file_descriptors[i].inodeIndex = UINT_MAX;
+    file_descriptors[i].inodeIndex = -1;
     file_descriptors[i].inode = NULL;
     file_descriptors[i].rwptr = 0;
   }
@@ -62,15 +62,15 @@ void init_file_descriptor(){
 
 void init_inode_table() {
   for (int i = 0; i < NUM_INODES; i++) {
-    inode_tbl[i].mode = UINT_MAX;
-    inode_tbl[i].link_cnt = UINT_MAX;
+    inode_tbl[i].mode = 0;
+    inode_tbl[i].link_cnt = 0;
     inode_tbl[i].uid = 0;
     inode_tbl[i].gid = 0;
-    inode_tbl[i].size = 0;
+    inode_tbl[i].size = -1;
     for (int j = 0; j < 12; j ++) {
-      inode_tbl[i].data_ptrs[j] = UINT_MAX;
+      inode_tbl[i].data_ptrs[j] = -1;
     }
-    inode_tbl[i].indirectPointer = UINT_MAX;
+    inode_tbl[i].indirectPointer = -1;
   }
 }
 
@@ -151,25 +151,29 @@ int sfs_fopen(char *name){
   int fd = -1;
   // find the first unused inode
   for (i = 0; i < NUM_INODES; i++){
-    if (inode_tbl[i].link_cnt == UINT_MAX && createdInode == 0){
+    if (inode_tbl[i].size == -1 && createdInode == 0){
       int num = get_index();
       if (num > 1022)return 0;
       inode_tbl[i].data_ptrs[0] = num;
-      inode_tbl[i].link_cnt = 0;
+      inode_tbl[i].size = 0;
       createdInode = 1;
 
       for (j = 0; j < NUM_OF_FILES; j++){
-        if (directory_entry_tbl[j].num == -1 && createdEntry == 0){
+        if (directory_entry_tbl[j].num == -1){
           directory_entry_tbl[j].num = i;
           strcpy(directory_entry_tbl[j].name, name);
           createdEntry = 1;
+          break;
         }
-        if (file_descriptors[j].inode == NULL && createdFD == 0){
+      }
+      for (j = 0; j < NUM_OF_FILES; j++){
+        if (file_descriptors[j].inode == NULL){
           file_descriptors[j].inode = &inode_tbl[i];
           file_descriptors[j].inodeIndex = i;
           file_descriptors[j].rwptr = 0;
           createdFD = 1;
           fd = j;
+          break;
         }
       }
     }
@@ -183,7 +187,7 @@ int sfs_fclose(int fileID) {
   if (inode_num == -1) return -1;
   file_descriptors[fileID].inodeIndex = -1;
   file_descriptors[fileID].inode = NULL;
-  file_descriptors[fileID].rwptr = -1;
+  file_descriptors[fileID].rwptr = 0;
   return 0;
 }
 
@@ -194,7 +198,7 @@ int sfs_fread(int fileID, char *buf, int length) {
   int i;
   for(i = 0; i < NUM_OF_FILES; i++){
     int num = directory_entry_tbl[i].num;
-    if (num == UINT_MAX)
+    if (num == -1)
       break;
     if (num == inode_num){
       file_opened = 1;
@@ -258,7 +262,7 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
   int i;
   for(i = 0; i < NUM_OF_FILES; i++){
     int num = directory_entry_tbl[i].num;
-    if (num == UINT_MAX)
+    if (num == -1)
       break;
     if (num == inode_num){
       file_opened = 1;
@@ -303,8 +307,8 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
         // create new link when 12 blocks are filled and indirect in not created
       if(cur_inode->indirectPointer == -1){
         for (int i = 0; i < NUM_INODES; i++){
-          if (inode_tbl[i].link_cnt == UINT_MAX){
-            inode_tbl[i].link_cnt = 0;
+          if (inode_tbl[i].size == -1){
+            inode_tbl[i].size = 0;
             cur_inode->indirectPointer = i;
             break;
           }
@@ -335,7 +339,7 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
 }
 
 int sfs_fseek(int fileID, int loc) {
-  if (fileID < 0 || file_descriptors[fileID].inodeIndex == UINT_MAX || loc < 0) {
+  if (fileID < 0 || file_descriptors[fileID].inodeIndex == -1 || loc < 0) {
     printf("Error : Invalid input!\n");
     return -1;
   }
