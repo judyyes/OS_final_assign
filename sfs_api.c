@@ -13,7 +13,7 @@
 #define NUM_BLOCKS 1024  //maximum number of data blocks on the disk.
 #define BITMAP_ROW_SIZE (NUM_BLOCKS/8) // this essentially mimcs the number of rows we have in the bitmap. we will have 128 rows.
 #define BLOCK_SIZE 1024
-#define NUM_INODES 500
+#define NUM_INODES 200
 #define NUM_OF_FILES 128
 
 
@@ -21,25 +21,16 @@ superblock_t super_block;
 file_descriptor file_descriptors[NUM_OF_FILES];
 directory_entry directory_entry_tbl[NUM_OF_FILES];
 inode_t inode_tbl[NUM_INODES];
-/* macros */
-#define FREE_BIT(_data, _which_bit) \
-    _data = _data | (1 << _which_bit)
-
-#define USE_BIT(_data, _which_bit) \
-    _data = _data & ~(1 << _which_bit)
-
-
-//initialize all bits to high
-// uint8_t free_bit_map[BITMAP_ROW_SIZE] = { [0 ... BITMAP_ROW_SIZE - 1] = UINT8_MAX };
+int cur_file_index = 0;
 
 //initialize super block
 void init_super_block(){
-  super_block.magic = 0;
-  super_block.block_size = BLOCK_SIZE;
-  super_block.fs_size = BLOCK_SIZE * NUM_BLOCKS;
+    super_block.magic = 0xACBD0005;
+    super_block.block_size = BLOCK_SIZE;
+    super_block.fs_size = BLOCK_SIZE * NUM_BLOCKS;
     super_block.inode_table_len = NUM_INODES;
-    int num = get_index();
-    super_block.root_dir_inode = num;
+    super_block.root_dir_inode = 0;
+    inode_tbl[0].size = 0;
   // todo
 }
 
@@ -80,38 +71,62 @@ file system on top of it. The mksfs() has a fresh flag to signal that the file s
 scratch. If flag is false, the file system is opened from the disk. The support for persistence is
 important so you can reuse existing data or create a new file system. */
 void mksfs(int fresh) {
-	if (fresh == 0){ // the flag is false, open from disk
-    init_disk(ZHU_DISHI_DISK, BLOCK_SIZE, NUM_BLOCKS);
-    // read super block from disk
-    // read_blocks(0, 1, &super_block);
-    // read inode table
+    if (fresh == 0){ // the flag is false, open from disk
+        init_disk(ZHU_DISHI_DISK, BLOCK_SIZE, NUM_BLOCKS);
+        // read super block from disk
+        read_blocks(0, 1, &super_block);
+        // read inode table
+        // read directory entry table
 
-    // read directory entry table
+        // read bit map table
+//        read_blocks(1023, 1, free_bit_map);
+//        init_inode_table();
+//        init_directory_entry();
+//        init_file_descriptor();
+    }
+    else{ // the flag is true, create from scratch
+        init_inode_table();
+        init_directory_entry();
+        init_file_descriptor();
+        init_super_block();
 
-    // read bit map table
-//    init_inode_table();
-//    init_directory_entry();
-//    init_file_descriptor();
-  }
-  else{ // the flag is true, create from scratch
-    init_fresh_disk(ZHU_DISHI_DISK, BLOCK_SIZE, NUM_BLOCKS);
+        init_fresh_disk(ZHU_DISHI_DISK, BLOCK_SIZE, NUM_BLOCKS);
 
-    // init_super_block();
-    // write superblock in sfs
-    // write_blocks(get_index(), 1, &super_block)
-    // printf("%d \n", free_bit_map[0]);
-    // write bit map in sfs
-    init_inode_table();
-    init_directory_entry();
-    init_file_descriptor();
-  }
+        // write super block on disk
+        force_set_index(0);
+        write_blocks(0, 1, &super_block);
+
+        // write inode table on disk
+        write_blocks(1, 15, &inode_tbl);
+
+        //write rootDir on disk
+
+        // write bit map in sfs
+        force_set_index(1023);
+        write_blocks(1023, 1, free_bit_map);
+    }
 }
 
 /* Copies the name of the next file in the directory into fname and returns non zero if there
 is a new file. Once all the files have been returned, this function returns 0. So, you should
 be able to use this function to loop through the directory. */
 int sfs_getnextfilename(char *fname){
+    int found_file = 0;
+    for (int i = cur_file_index; i < NUM_OF_FILES; i++) {
+        if (strcmp(directory_entry_tbl[i].name, "\0") != 0) {
+            int j;
+            for (j = 0; j < MAX_FILE_NAME; j++){
+                fname[j] = directory_entry_tbl[i].name[j];
+            }
+            fname[j] = '\0';
 
+            found_file = 1;
+            cur_file_index++;
+            return 1;
+        }
+    }
+    cur_file_index = found_file == 1 ? cur_file_index : 0;
+    return 0;
 }
 
 /* Returns the size of a given file */
