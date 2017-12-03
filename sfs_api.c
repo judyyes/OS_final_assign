@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//#include <fuse.h>
+#include <fuse.h>
 #include <strings.h>
 #include <limits.h>
 #include <libgen.h>
@@ -22,6 +22,8 @@ file_descriptor file_descriptors[NUM_OF_FILES];
 directory_entry directory_entry_tbl[NUM_OF_FILES];
 inode_t inode_tbl[NUM_INODES];
 int cur_file_index = 0;
+int inode_blocks = sizeof(inode_t) * NUM_INODES / BLOCK_SIZE + 1; // 15
+int dir_block_num = sizeof(directory_entry) * NUM_OF_FILES / BLOCK_SIZE + 1; // 4
 
 //initialize super block
 void init_super_block(){
@@ -66,23 +68,28 @@ void init_inode_table() {
   }
 }
 
-/* Formats the virtual disk implemented by the disk emulator and creates an instance of the simple
-file system on top of it. The mksfs() has a fresh flag to signal that the file system should be created
-scratch. If flag is false, the file system is opened from the disk. The support for persistence is
-important so you can reuse existing data or create a new file system. */
+void update_disk(){
+    write_blocks(1, inode_blocks, &inode_tbl);
+    write_blocks(inode_blocks + 1, dir_block_num, &directory_entry_tbl);
+    write_blocks(1023, 1, free_bit_map);
+}
+
 void mksfs(int fresh) {
     if (fresh == 0){ // the flag is false, open from disk
         init_disk(ZHU_DISHI_DISK, BLOCK_SIZE, NUM_BLOCKS);
         // read super block from disk
         read_blocks(0, 1, &super_block);
+
         // read inode table
+        read_blocks(1, inode_blocks, &inode_tbl);
+
         // read directory entry table
+        read_blocks(inode_blocks+1, dir_block_num, &directory_entry_tbl);
 
         // read bit map table
-//        read_blocks(1023, 1, free_bit_map);
-//        init_inode_table();
-//        init_directory_entry();
-//        init_file_descriptor();
+        read_blocks(1023, 1, free_bit_map);
+
+        init_file_descriptor();
     }
     else{ // the flag is true, create from scratch
         init_inode_table();
@@ -97,9 +104,18 @@ void mksfs(int fresh) {
         write_blocks(0, 1, &super_block);
 
         // write inode table on disk
-        write_blocks(1, 15, &inode_tbl);
+        for (int i = 0; i < inode_blocks; i++) {
+            get_index();
+        }
+        write_blocks(1, inode_blocks, &inode_tbl);
 
         //write rootDir on disk
+        inode_tbl[0].size = sizeof(directory_entry) * NUM_OF_FILES;
+        for (int i = 0; i < dir_block_num; i ++){
+            int num = get_index();
+            inode_tbl[0].data_ptrs[i] = num;
+        }
+        write_blocks(inode_blocks + 1, dir_block_num, &directory_entry_tbl);
 
         // write bit map in sfs
         force_set_index(1023);
@@ -113,7 +129,7 @@ be able to use this function to loop through the directory. */
 int sfs_getnextfilename(char *fname){
     int found_file = 0;
     for (int i = cur_file_index; i < NUM_OF_FILES; i++) {
-        if (strcmp(directory_entry_tbl[i].name, "\0") != 0) {
+        if (directory_entry_tbl[i].name[0] != '\0') {
             int j;
             for (j = 0; j < MAX_FILE_NAME; j++){
                 fname[j] = directory_entry_tbl[i].name[j];
@@ -134,7 +150,7 @@ int sfs_getfilesize(const char* path){
     int file_size = 0;
     for (int i = 0; i < NUM_OF_FILES; i++){
         if (compare_string(directory_entry_tbl[i].name, basename((char*)path))){
-            file_size = file_descriptors[directory_entry_tbl[i].num].inode->size;
+            return inode_tbl[directory_entry_tbl[i].num].size;
         }
     }
     return file_size;
@@ -201,6 +217,7 @@ int sfs_fopen(char *name){
       }
     }
   }
+    update_disk();
   return fd;
 }
 
@@ -358,7 +375,8 @@ int sfs_fwrite(int fileID, const char *buf, int length) {
     file_descriptors[fileID].rwptr += write_len;
   }
   file_descriptors[fileID].inode->size = file_descriptors[fileID].rwptr > file_descriptors[fileID].inode->size ? file_descriptors[fileID].rwptr : file_descriptors[fileID].inode->size;
-  return len_written;
+  update_disk();
+    return len_written;
 }
 
 int sfs_fseek(int fileID, int loc) {
@@ -420,6 +438,7 @@ int sfs_remove(char *file) {
 
         }
     }
+    update_disk();
     return 0;
 
 }
