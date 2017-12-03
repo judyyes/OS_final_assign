@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fuse.h>
+//#include <fuse.h>
 #include <strings.h>
 #include <limits.h>
 #include <libgen.h>
@@ -52,6 +52,10 @@ void init_file_descriptor(){
     file_descriptors[i].inode = NULL;
     file_descriptors[i].rwptr = 0;
   }
+    // init fd table 0
+    file_descriptors[0].inode = &inode_tbl[0];
+    file_descriptors[0].rwptr = 0;
+    file_descriptors[0].inodeIndex = 0;
 }
 
 void init_inode_table() {
@@ -185,7 +189,7 @@ int sfs_fopen(char *name){
     }
   }
   // new file
-  int createdEntry = 0, createdFD = 0, createdInode = 0;
+  int createdInode = 0;
   int fd = -1;
   // find the first unused inode
   for (i = 0; i < NUM_INODES; i++){
@@ -210,7 +214,6 @@ int sfs_fopen(char *name){
           file_descriptors[j].inode = &inode_tbl[i];
           file_descriptors[j].inodeIndex = i;
           file_descriptors[j].rwptr = 0;
-          createdFD = 1;
           fd = j;
           break;
         }
